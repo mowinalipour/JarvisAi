@@ -103,51 +103,92 @@ class WakeService : Service() {
         if (overlay != null) return
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
         windowManager = wm
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(40, 36, 40, 36)
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(0xF0081935.toInt())
-                cornerRadius = 48f
-                setStroke(2, 0xFF438EEB.toInt())
+        val density = resources.displayMetrics.density
+        fun dp(n: Int) = (n * density).toInt()
+        val panel = FrameLayout(this).apply {
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                intArrayOf(0xF5091A3D.toInt(), 0xFA030918.toInt())
+            ).apply {
+                cornerRadius = dp(30).toFloat()
+                setStroke(dp(1), 0xFF468DEB.toInt())
             }
+            elevation = dp(20).toFloat()
         }
+        val orb = WakeOrb(this)
+        panel.addView(orb, FrameLayout.LayoutParams(dp(100), dp(100), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
+            topMargin = dp(12)
+        })
         val title = TextView(this).apply {
-            text = "JARVIS  ●"
-            textSize = 24f
+            text = "J A R V I S"
+            textSize = 20f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
         }
+        panel.addView(title, FrameLayout.LayoutParams(-1, dp(38), Gravity.TOP).apply { topMargin = dp(110) })
         val subtitle = TextView(this).apply {
-            text = "بیدارم. برای گفتگو لمس کن"
-            textSize = 15f
+            text = "بیدارم، برای گفتگو لمس کن"
+            textSize = 14f
             setTextColor(0xFFB8D7FF.toInt())
             gravity = Gravity.CENTER
-            setPadding(0, 18, 0, 0)
         }
-        panel.addView(title)
-        panel.addView(subtitle)
+        panel.addView(subtitle, FrameLayout.LayoutParams(-1, dp(42), Gravity.BOTTOM).apply { bottomMargin = dp(10) })
         panel.setOnClickListener {
             dismiss()
             val launch = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             try { startActivity(launch) } catch (_: Exception) {}
         }
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.MATCH_PARENT, dp(212),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP
             x = 0
-            y = 100
+            y = dp(42)
         }
         try {
+            params.width = resources.displayMetrics.widthPixels - dp(44)
             wm.addView(panel, params)
             overlay = panel
             handler.postDelayed({ dismiss() }, 6000)
         } catch (_: Exception) {}
+    }
+
+    private class WakeOrb(context: Context) : View(context) {
+        private val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        private var phase = 0.0
+        override fun onDraw(canvas: android.graphics.Canvas) {
+            super.onDraw(canvas)
+            val cx = width / 2f
+            val cy = height / 2f
+            val r = minOf(width, height) * 0.31f
+            p.style = android.graphics.Paint.Style.FILL
+            p.shader = android.graphics.RadialGradient(cx, cy, r * 1.65f,
+                intArrayOf(0xAA246EEB.toInt(), 0x553678D9, Color.TRANSPARENT),
+                null, android.graphics.Shader.TileMode.CLAMP)
+            canvas.drawCircle(cx, cy, r * 1.65f, p)
+            p.shader = null
+            for (i in 0..5) {
+                val path = android.graphics.Path()
+                for (step in 0..140) {
+                    val t = step * Math.PI * 2.0 / 140.0
+                    val rr = r * (0.87 + 0.14 * kotlin.math.sin(t * 3 + phase + i * 0.8))
+                    val x = cx + (rr * kotlin.math.cos(t + phase * 0.15 + i * 0.25)).toFloat()
+                    val y = cy + (rr * kotlin.math.sin(t + phase * 0.15 + i * 0.25)).toFloat()
+                    if (step == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+                p.style = android.graphics.Paint.Style.STROKE
+                p.strokeWidth = resources.displayMetrics.density * (if (i == 2) 2.3f else 1.2f)
+                p.color = intArrayOf(0xFF5EA9FF.toInt(), 0xFF2C72F4.toInt(), 0xFFA4E9FF.toInt(), 0xFF467EEA.toInt(), 0xFF7ECFFF.toInt(), 0xFF4B99F2.toInt())[i]
+                p.setShadowLayer(7f, 0f, 0f, p.color)
+                canvas.drawPath(path, p)
+                p.clearShadowLayer()
+            }
+            phase += 0.045
+            postInvalidateDelayed(33)
+        }
     }
 
     private fun dismiss() {
