@@ -36,6 +36,38 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var foreground = false
     private var speaking = false
     private var failures = 0
+    private lateinit var wakeToggle: TextView
+    private fun wakeEnabled(): Boolean = getSharedPreferences("jarvis", MODE_PRIVATE).getBoolean("wake", false)
+    private fun setWake(enabled: Boolean) {
+        getSharedPreferences("jarvis", MODE_PRIVATE).edit().putBoolean("wake", enabled).apply()
+        if (enabled) {
+            recognizer?.cancel()
+            listening = false
+            handler.removeCallbacks(retry)
+            val intent = Intent(this, WakeService::class.java)
+            try { startForegroundService(intent) } catch (e: Exception) {
+                getSharedPreferences("jarvis", MODE_PRIVATE).edit().putBoolean("wake", false).apply()
+                status.text = "فعال‌سازی سرویس ممکن نشد"
+            }
+        } else {
+            stopService(Intent(this, WakeService::class.java))
+            scheduleListen(400)
+        }
+        if (::wakeToggle.isInitialized) wakeToggle.text = if (wakeEnabled()) "● بیدارباش فعال — لمس برای توقف" else "○ فعال‌کردن بیدارباش جارویس"
+    }
+    private fun requestWake() {
+        if (wakeEnabled()) { setWake(false); return }
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), permissionCode)
+            return
+        }
+        if (!Settings.canDrawOverlays(this)) {
+            startActivityForResult(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                android.net.Uri.parse("package:$packageName")), 103)
+            return
+        }
+        setWake(true)
+    }
     private val retry = Runnable { if (foreground && !speaking) startListen() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -88,6 +120,19 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             rightMargin = dp(25)
             bottomMargin = dp(45)
         })
+        wakeToggle = TextView(this).apply {
+            text = if (wakeEnabled()) "● بیدارباش فعال — لمس برای توقف" else "○ فعال‌کردن بیدارباش جارویس"
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(0xFF9FD6FF.toInt())
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            setOnClickListener { requestWake() }
+        }
+        root.addView(wakeToggle, FrameLayout.LayoutParams(-1, dp(58), Gravity.BOTTOM).apply {
+            bottomMargin = dp(105)
+            leftMargin = dp(25)
+            rightMargin = dp(25)
+        })
         setContentView(root)
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), permissionCode)
@@ -110,7 +155,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     override fun onResume() {
         super.onResume()
         foreground = true
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) scheduleListen(450)
+        if (!wakeEnabled() && checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) scheduleListen(450)
     }
 
     override fun onPause() {
@@ -124,7 +169,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
     private fun scheduleListen(delay: Long) {
         handler.removeCallbacks(retry)
-        if (foreground && !speaking) handler.postDelayed(retry, delay)
+        if (foreground && !speaking && !wakeEnabled()) handler.postDelayed(retry, delay)
     }
 
     private fun requestListen() {
@@ -212,9 +257,14 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == permissionCode) {
-            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) startListen()
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) { if (!wakeEnabled()) startListen() }
             else status.text = "برای صحبت، مجوز میکروفون لازم است."
         }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 103 && Settings.canDrawOverlays(this)) setWake(true)
     }
 
     override fun onDestroy() {
