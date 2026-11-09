@@ -36,7 +36,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var foreground = false
     private var speaking = false
     private var failures = 0
-    private lateinit var wakeToggle: TextView
+    private var wakeToggle: TextView? = null
     private fun wakeEnabled(): Boolean = getSharedPreferences("jarvis", MODE_PRIVATE).getBoolean("wake", false)
     private fun setWake(enabled: Boolean) {
         getSharedPreferences("jarvis", MODE_PRIVATE).edit().putBoolean("wake", enabled).apply()
@@ -53,7 +53,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             stopService(Intent(this, WakeService::class.java))
             scheduleListen(400)
         }
-        if (::wakeToggle.isInitialized) wakeToggle.text = if (wakeEnabled()) "● بیدارباش فعال — لمس برای توقف" else "○ فعال‌کردن بیدارباش جارویس"
+        wakeToggle?.text = if (wakeEnabled()) "● بیدارباش فعال — لمس برای توقف" else "○ فعال‌کردن بیدارباش جارویس"
     }
     private fun requestWake() {
         if (wakeEnabled()) { setWake(false); return }
@@ -68,6 +68,48 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
         setWake(true)
     }
+    private fun showMenu() {
+        val options = arrayOf("تنظیمات", "درباره جارویس")
+        android.app.AlertDialog.Builder(this)
+            .setTitle("JARVIS")
+            .setItems(options) { _, which ->
+                if (which == 0) showSettings() else android.app.AlertDialog.Builder(this)
+                    .setMessage("Jarvis AI — دستیار صوتی اندروید").setPositiveButton("بستن", null).show()
+            }.show()
+    }
+
+    private fun showSettings() {
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(16), dp(22), dp(12))
+        }
+        val description = TextView(this).apply {
+            text = "بیدارباش صوتی\nبا گفتن «جارویس» در سایر برنامه‌ها پنجره شناور باز می‌شود. این قابلیت آزمایشی است و میکروفون با اعلان دائمی فعال می‌ماند."
+            textSize = 15f
+            setTextColor(0xFF243650.toInt())
+            setPadding(0, 0, 0, dp(18))
+        }
+        panel.addView(description)
+        val toggle = android.widget.Switch(this).apply {
+            text = "فعال‌سازی بیدارباش"
+            textSize = 16f
+            isChecked = wakeEnabled()
+        }
+        wakeToggle = TextView(this)
+        panel.addView(toggle)
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setTitle("تنظیمات جارویس")
+            .setView(panel)
+            .setPositiveButton("بستن", null)
+            .create()
+        toggle.setOnCheckedChangeListener { _, enabled ->
+            if (enabled != wakeEnabled()) requestWake()
+            toggle.isChecked = wakeEnabled()
+            dialog.dismiss()
+        }
+        dialog.show()
+    }
+
     private val retry = Runnable { if (foreground && !speaking) startListen() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -120,18 +162,17 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             rightMargin = dp(25)
             bottomMargin = dp(45)
         })
-        wakeToggle = TextView(this).apply {
-            text = if (wakeEnabled()) "● بیدارباش فعال — لمس برای توقف" else "○ فعال‌کردن بیدارباش جارویس"
-            textSize = 14f
+        val menuButton = TextView(this).apply {
+            text = "☰"
+            textSize = 28f
             gravity = Gravity.CENTER
-            setTextColor(0xFF9FD6FF.toInt())
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-            setOnClickListener { requestWake() }
+            setTextColor(Color.WHITE)
+            contentDescription = "باز کردن منو"
+            setOnClickListener { showMenu() }
         }
-        root.addView(wakeToggle, FrameLayout.LayoutParams(-1, dp(58), Gravity.BOTTOM).apply {
-            bottomMargin = dp(105)
-            leftMargin = dp(25)
-            rightMargin = dp(25)
+        root.addView(menuButton, FrameLayout.LayoutParams(dp(58), dp(58), Gravity.TOP or Gravity.START).apply {
+            leftMargin = dp(12)
+            topMargin = dp(12)
         })
         setContentView(root)
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
