@@ -35,83 +35,131 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = Color.rgb(3, 6, 18)
-        window.navigationBarColor = Color.rgb(3, 6, 18)
+        window.statusBarColor = Color.rgb(3, 6, 19)
+        window.navigationBarColor = Color.rgb(3, 6, 19)
         tts = TextToSpeech(this, this)
+        val root = FrameLayout(this).apply { setBackgroundColor(Color.rgb(3, 6, 19)) }
 
-        val root = FrameLayout(this).apply { setBackgroundColor(Color.rgb(3, 6, 18)) }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(25), 0, dp(25), 0)
+        }
+        val voice = TextView(this).apply {
+            text = "VOICE  /  AI"
+            textSize = 11f
+            letterSpacing = 0.16f
+            setTextColor(Color.rgb(151, 172, 213))
+        }
+        val version = TextView(this).apply {
+            text = "V 0.3"
+            textSize = 11f
+            gravity = Gravity.END
+            setTextColor(Color.rgb(151, 172, 213))
+        }
+        header.addView(voice, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(version)
+        root.addView(header, FrameLayout.LayoutParams(-1, dp(56), Gravity.TOP))
+
+        val card = FrameLayout(this)
+        val cardParams = FrameLayout.LayoutParams(-1, dp(540), Gravity.CENTER).apply {
+            leftMargin = dp(24)
+            rightMargin = dp(24)
+        }
+        card.background = android.graphics.drawable.GradientDrawable(
+            android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+            intArrayOf(0xAA203F78.toInt(), 0xEE08142E.toInt(), 0xFF0B1735.toInt())
+        ).apply {
+            cornerRadius = dp(35).toFloat()
+            setStroke(dp(1), 0xFF5275B6.toInt())
+        }
+        root.addView(card, cardParams)
         art = AuraView(this)
-        root.addView(art, FrameLayout.LayoutParams(-1, -1))
-        val content = LinearLayout(this).apply {
+        card.addView(art, FrameLayout.LayoutParams(-1, -1))
+
+        val titleGroup = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(32, 36, 32, 36)
+            gravity = Gravity.CENTER
         }
-        val top = TextView(this).apply {
-            text = "VOICE                                        V0.2"
-            setTextColor(Color.rgb(185, 201, 230))
-            textSize = 12f
-        }
-        content.addView(top)
-        val space = View(this)
-        content.addView(space, LinearLayout.LayoutParams(1, 0, 1f))
         val title = TextView(this).apply {
             text = "JARVIS"
-            textSize = 44f
-            letterSpacing = 0.14f
+            textSize = 43f
+            letterSpacing = 0.17f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
         }
-        content.addView(title)
         val subtitle = TextView(this).apply {
             text = "Speak. Listen. Understand."
-            textSize = 15f
+            textSize = 13f
             gravity = Gravity.CENTER
-            setTextColor(Color.rgb(170, 195, 228))
+            setTextColor(0xFFB4C9EC.toInt())
         }
-        content.addView(subtitle)
-        val waveSpace = View(this)
-        content.addView(waveSpace, LinearLayout.LayoutParams(1, dp(195)))
-        val mic = TextView(this).apply {
-            text = "●"
-            textSize = 48f
-            gravity = Gravity.CENTER
-            setTextColor(Color.rgb(3, 13, 32))
-            background = android.graphics.drawable.GradientDrawable().apply {
-                shape = android.graphics.drawable.GradientDrawable.OVAL
-                setColor(Color.WHITE)
-                setStroke(dp(5), Color.rgb(28, 139, 192))
+        titleGroup.addView(title)
+        titleGroup.addView(subtitle)
+        card.addView(titleGroup, FrameLayout.LayoutParams(-1, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
+            topMargin = dp(75)
+        })
+
+        val mic = object : View(this) {
+            private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+            override fun onDraw(canvas: Canvas) {
+                super.onDraw(canvas)
+                val cx = width / 2f
+                val cy = height / 2f
+                val density = resources.displayMetrics.density
+                p.style = Paint.Style.FILL
+                p.color = 0x2237BDFF
+                canvas.drawCircle(cx, cy, 45f * density, p)
+                p.color = 0xFF50C8FF.toInt()
+                canvas.drawCircle(cx, cy, 37f * density, p)
+                p.color = Color.WHITE
+                canvas.drawCircle(cx, cy, 32f * density, p)
+                p.color = 0xFF07152C.toInt()
+                canvas.drawRoundRect(cx - 6f*density, cy - 17f*density, cx + 6f*density, cy + 8f*density, 6f*density, 6f*density, p)
+                p.style = Paint.Style.STROKE
+                p.strokeWidth = 2.8f * density
+                p.strokeCap = Paint.Cap.ROUND
+                canvas.drawArc(cx - 12f*density, cy - 10f*density, cx + 12f*density, cy + 16f*density, 0f, 180f, false, p)
+                canvas.drawLine(cx, cy + 16f*density, cx, cy + 23f*density, p)
+                canvas.drawLine(cx - 7f*density, cy + 23f*density, cx + 7f*density, cy + 23f*density, p)
             }
-            setOnClickListener { requestListen() }
+        }.apply {
             contentDescription = "شروع شنیدن فرمان صوتی"
+            setOnClickListener { requestListen() }
         }
-        content.addView(mic, LinearLayout.LayoutParams(dp(90), dp(90)))
+        card.addView(mic, FrameLayout.LayoutParams(dp(104), dp(104), Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM).apply {
+            bottomMargin = dp(100)
+        })
+
         val hint = TextView(this).apply {
             text = "TAP TO SPEAK"
-            textSize = 12f
+            textSize = 11f
+            letterSpacing = 0.12f
             gravity = Gravity.CENTER
-            setTextColor(Color.rgb(160, 189, 224))
-            setPadding(0, dp(14), 0, 0)
+            setTextColor(0xFFA8BFDF.toInt())
         }
-        content.addView(hint)
+        card.addView(hint, FrameLayout.LayoutParams(-1, dp(25), Gravity.BOTTOM).apply {
+            bottomMargin = dp(78)
+        })
         status = TextView(this).apply {
-            text = "برای صحبت با جارویس روی دکمه بزن"
-            textSize = 16f
+            text = "برای صحبت با جارویس لمس کن"
+            textSize = 14f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            setPadding(0, dp(26), 0, 0)
+            maxLines = 3
+            setPadding(dp(20), 0, dp(20), 0)
         }
-        content.addView(status)
-        val bottomSpace = View(this)
-        content.addView(bottomSpace, LinearLayout.LayoutParams(1, 0, 1f))
+        card.addView(status, FrameLayout.LayoutParams(-1, dp(66), Gravity.BOTTOM).apply {
+            bottomMargin = dp(12)
+        })
+
         val footer = TextView(this).apply {
-            text = "AI ASSISTANT                            VOICE READY"
-            textSize = 11f
+            text = "AI ASSISTANT                                 VOICE READY"
+            textSize = 10f
             gravity = Gravity.CENTER
-            setTextColor(Color.rgb(147, 179, 218))
+            setTextColor(0xFF829AC0.toInt())
         }
-        content.addView(footer)
-        root.addView(content, FrameLayout.LayoutParams(-1, -1))
+        root.addView(footer, FrameLayout.LayoutParams(-1, dp(48), Gravity.BOTTOM))
         setContentView(root)
     }
 
@@ -215,42 +263,36 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         var level = 0f
             set(value) { field = value; invalidate() }
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private var phase = 0f
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             val w = width.toFloat()
             val h = height.toFloat()
-            val left = w * 0.10f
-            val top = h * 0.19f
-            val right = w * 0.90f
-            val bottom = h * 0.83f
-            val panel = RectF(left, top, right, bottom)
-            paint.shader = LinearGradient(left, top, right, bottom,
-                intArrayOf(Color.rgb(32, 68, 132), Color.rgb(8, 17, 42), Color.rgb(19, 47, 98)),
-                null, Shader.TileMode.CLAMP)
-            paint.style = Paint.Style.FILL
-            canvas.drawRoundRect(panel, 40f * resources.displayMetrics.density, 40f * resources.displayMetrics.density, paint)
-            paint.shader = null
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = resources.displayMetrics.density
-            paint.color = Color.rgb(88, 137, 215)
-            canvas.drawRoundRect(panel, 40f * resources.displayMetrics.density, 40f * resources.displayMetrics.density, paint)
-            val centerY = h * 0.49f
+            val d = resources.displayMetrics.density
+            val cy = h * 0.49f
+            val left = w * 0.08f
+            val span = w * 0.84f
             for (i in 0..3) {
                 val path = Path()
                 for (step in 0..160) {
                     val t = step / 160f
-                    val x = left + 15f * resources.displayMetrics.density + (right - left - 30f * resources.displayMetrics.density) * t
+                    val x = left + span * t
                     val envelope = sin(Math.PI * t).toFloat()
-                    val frequency = (3 + i) * Math.PI * 2
-                    val amplitude = (24f + i * 9f + if (active) level * 40f else 0f) * resources.displayMetrics.density
-                    val y = centerY + sin(t * frequency + i * 0.7).toFloat() * envelope * amplitude
+                    val wave = sin(t * Math.PI * (4.0 + i * 0.6) + i * 0.8 + phase).toFloat()
+                    val amplitude = (25f + i * 5f + if (active) level * 32f else 0f) * d
+                    val y = cy + wave * envelope * amplitude
                     if (step == 0) path.moveTo(x, y) else path.lineTo(x, y)
                 }
-                paint.color = intArrayOf(0xFF6EA7FF.toInt(), 0xFFB1C8FF.toInt(), 0xFF73C5E9.toInt(), 0xFF8E9FDF.toInt())[i]
-                paint.strokeWidth = resources.displayMetrics.density
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = (if (i == 1) 1.8f else 1.2f) * d
+                paint.color = intArrayOf(0xFF4C8BEB.toInt(), 0xFFC2D9FF.toInt(), 0xFF70D9FF.toInt(), 0xFF879DDA.toInt())[i]
+                paint.alpha = if (active) 245 else 170
                 canvas.drawPath(path, paint)
             }
-            paint.style = Paint.Style.FILL
+            if (active) {
+                phase += 0.12f
+                postInvalidateDelayed(33)
+            }
         }
     }
 }
