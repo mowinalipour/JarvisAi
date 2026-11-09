@@ -35,131 +35,99 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = Color.rgb(3, 6, 19)
-        window.navigationBarColor = Color.rgb(3, 6, 19)
+        window.statusBarColor = Color.BLACK
+        window.navigationBarColor = Color.BLACK
         tts = TextToSpeech(this, this)
-        val root = FrameLayout(this).apply { setBackgroundColor(Color.rgb(3, 6, 19)) }
-
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(25), 0, dp(25), 0)
+        val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        val ambient = View(this).apply {
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.BLACK, 0xFF020713.toInt(), 0xFF071B35.toInt())
+            )
         }
-        val voice = TextView(this).apply {
-            text = "VOICE  /  AI"
-            textSize = 11f
-            letterSpacing = 0.16f
-            setTextColor(Color.rgb(151, 172, 213))
-        }
-        val version = TextView(this).apply {
-            text = "V 0.3"
-            textSize = 11f
-            gravity = Gravity.END
-            setTextColor(Color.rgb(151, 172, 213))
-        }
-        header.addView(voice, LinearLayout.LayoutParams(0, -2, 1f))
-        header.addView(version)
-        root.addView(header, FrameLayout.LayoutParams(-1, dp(56), Gravity.TOP))
-
-        val card = FrameLayout(this)
-        val cardParams = FrameLayout.LayoutParams(-1, dp(540), Gravity.CENTER).apply {
-            leftMargin = dp(24)
-            rightMargin = dp(24)
-        }
-        card.background = android.graphics.drawable.GradientDrawable(
-            android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
-            intArrayOf(0xAA203F78.toInt(), 0xEE08142E.toInt(), 0xFF0B1735.toInt())
-        ).apply {
-            cornerRadius = dp(35).toFloat()
-            setStroke(dp(1), 0xFF5275B6.toInt())
-        }
-        root.addView(card, cardParams)
+        root.addView(ambient, FrameLayout.LayoutParams(-1, -1))
         art = AuraView(this)
-        card.addView(art, FrameLayout.LayoutParams(-1, -1))
-
-        val titleGroup = LinearLayout(this).apply {
+        root.addView(art, FrameLayout.LayoutParams(-1, -1))
+        val greeting = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
         }
-        val title = TextView(this).apply {
-            text = "JARVIS"
-            textSize = 43f
-            letterSpacing = 0.17f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-        }
-        val subtitle = TextView(this).apply {
-            text = "Speak. Listen. Understand."
-            textSize = 13f
-            gravity = Gravity.CENTER
-            setTextColor(0xFFB4C9EC.toInt())
-        }
-        titleGroup.addView(title)
-        titleGroup.addView(subtitle)
-        card.addView(titleGroup, FrameLayout.LayoutParams(-1, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
-            topMargin = dp(75)
-        })
-
-        val mic = object : View(this) {
-            private val p = Paint(Paint.ANTI_ALIAS_FLAG)
-            override fun onDraw(canvas: Canvas) {
-                super.onDraw(canvas)
-                val cx = width / 2f
-                val cy = height / 2f
-                val density = resources.displayMetrics.density
-                p.style = Paint.Style.FILL
-                p.color = 0x2237BDFF
-                canvas.drawCircle(cx, cy, 45f * density, p)
-                p.color = 0xFF50C8FF.toInt()
-                canvas.drawCircle(cx, cy, 37f * density, p)
-                p.color = Color.WHITE
-                canvas.drawCircle(cx, cy, 32f * density, p)
-                p.color = 0xFF07152C.toInt()
-                canvas.drawRoundRect(cx - 6f*density, cy - 17f*density, cx + 6f*density, cy + 8f*density, 6f*density, 6f*density, p)
-                p.style = Paint.Style.STROKE
-                p.strokeWidth = 2.8f * density
-                p.strokeCap = Paint.Cap.ROUND
-                canvas.drawArc(cx - 12f*density, cy - 10f*density, cx + 12f*density, cy + 16f*density, 0f, 180f, false, p)
-                canvas.drawLine(cx, cy + 16f*density, cx, cy + 23f*density, p)
-                canvas.drawLine(cx - 7f*density, cy + 23f*density, cx + 7f*density, cy + 23f*density, p)
-            }
-        }.apply {
-            contentDescription = "شروع شنیدن فرمان صوتی"
-            setOnClickListener { requestListen() }
-        }
-        card.addView(mic, FrameLayout.LayoutParams(dp(104), dp(104), Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM).apply {
-            bottomMargin = dp(100)
-        })
-
-        val hint = TextView(this).apply {
-            text = "TAP TO SPEAK"
-            textSize = 11f
-            letterSpacing = 0.12f
-            gravity = Gravity.CENTER
-            setTextColor(0xFFA8BFDF.toInt())
-        }
-        card.addView(hint, FrameLayout.LayoutParams(-1, dp(25), Gravity.BOTTOM).apply {
-            bottomMargin = dp(78)
-        })
-        status = TextView(this).apply {
-            text = "برای صحبت با جارویس لمس کن"
+        val hello = TextView(this).apply {
+            text = "Hello"
             textSize = 14f
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            maxLines = 3
-            setPadding(dp(20), 0, dp(20), 0)
+            setTextColor(0xFF94A6C5.toInt())
         }
-        card.addView(status, FrameLayout.LayoutParams(-1, dp(66), Gravity.BOTTOM).apply {
-            bottomMargin = dp(12)
-        })
-
-        val footer = TextView(this).apply {
-            text = "AI ASSISTANT                                 VOICE READY"
-            textSize = 10f
+        val title = TextView(this).apply {
+            text = "How can I help\nyou today?"
+            textSize = 32f
             gravity = Gravity.CENTER
-            setTextColor(0xFF829AC0.toInt())
+            setLineSpacing(dp(2).toFloat(), 1f)
+            setTextColor(Color.WHITE)
+            typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
         }
-        root.addView(footer, FrameLayout.LayoutParams(-1, dp(48), Gravity.BOTTOM))
+        greeting.addView(hello)
+        greeting.addView(title)
+        root.addView(greeting, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER).apply {
+            topMargin = dp(210)
+        })
+        val inputBar = FrameLayout(this).apply {
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0xFF234E84.toInt(), 0xFF4E9EE8.toInt())
+            ).apply {
+                cornerRadius = dp(28).toFloat()
+                setStroke(dp(1), 0xFF74B5FF.toInt())
+            }
+            elevation = dp(10).toFloat()
+        }
+        val field = android.widget.EditText(this).apply {
+            hint = "Ask anything..."
+            setHintTextColor(0xFFC2D4EC.toInt())
+            setTextColor(Color.WHITE)
+            textSize = 15f
+            background = null
+            isSingleLine = true
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND
+            setPadding(dp(20), 0, dp(8), 0)
+            setOnEditorActionListener { _, _, _ ->
+                val message = text.toString().trim()
+                if (message.isNotEmpty()) {
+                    respond(message)
+                    setText("")
+                }
+                true
+            }
+        }
+        inputBar.addView(field, FrameLayout.LayoutParams(-1, -1).apply {
+            rightMargin = dp(64)
+        })
+        val voice = TextView(this).apply {
+            text = "≋"
+            textSize = 33f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            contentDescription = "شروع فرمان صوتی"
+            setOnClickListener { requestListen() }
+        }
+        inputBar.addView(voice, FrameLayout.LayoutParams(dp(58), -1, Gravity.END))
+        root.addView(inputBar, FrameLayout.LayoutParams(-1, dp(62), Gravity.BOTTOM).apply {
+            leftMargin = dp(22)
+            rightMargin = dp(22)
+            bottomMargin = dp(28)
+        })
+        status = TextView(this).apply {
+            text = ""
+            textSize = 13f
+            gravity = Gravity.CENTER
+            maxLines = 2
+            setTextColor(0xFFBDD8F9.toInt())
+        }
+        root.addView(status, FrameLayout.LayoutParams(-1, dp(48), Gravity.BOTTOM).apply {
+            leftMargin = dp(25)
+            rightMargin = dp(25)
+            bottomMargin = dp(99)
+        })
         setContentView(root)
     }
 
@@ -259,40 +227,51 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
     private class AuraView(context: android.content.Context) : View(context) {
         var active = false
-            set(value) { field = value; invalidate() }
+            set(value) { field = value }
         var level = 0f
-            set(value) { field = value; invalidate() }
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+            set(value) { field = value }
+        private val p = Paint(Paint.ANTI_ALIAS_FLAG)
         private var phase = 0f
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             val w = width.toFloat()
             val h = height.toFloat()
             val d = resources.displayMetrics.density
-            val cy = h * 0.49f
-            val left = w * 0.08f
-            val span = w * 0.84f
-            for (i in 0..3) {
+            val cx = w * 0.5f
+            val cy = h * 0.32f
+            val radius = minOf(w * 0.25f, 112f * d)
+            val pulse = 1f + 0.035f * sin(phase * 0.7f).toFloat()
+            p.style = Paint.Style.FILL
+            p.shader = android.graphics.RadialGradient(cx, cy, radius * 1.7f,
+                intArrayOf(0x88255FC4.toInt(), 0x44236BCE.toInt(), Color.TRANSPARENT),
+                null, Shader.TileMode.CLAMP)
+            canvas.drawCircle(cx, cy, radius * 1.7f, p)
+            p.shader = null
+            for (i in 0..6) {
                 val path = Path()
-                for (step in 0..160) {
-                    val t = step / 160f
-                    val x = left + span * t
-                    val envelope = sin(Math.PI * t).toFloat()
-                    val wave = sin(t * Math.PI * (4.0 + i * 0.6) + i * 0.8 + phase).toFloat()
-                    val amplitude = (25f + i * 5f + if (active) level * 32f else 0f) * d
-                    val y = cy + wave * envelope * amplitude
+                val shift = phase * (if (i % 2 == 0) 0.9f else -0.75f)
+                for (step in 0..220) {
+                    val t = step / 220.0
+                    val theta = t * Math.PI * 2.0
+                    val twist = sin(theta * 2.0 + shift + i * 0.5) * 0.24
+                    val rr = radius * pulse * (0.72 + 0.16 * sin(theta * 3 + shift + i))
+                    val x = cx + (rr * kotlin.math.cos(theta + twist)).toFloat()
+                    val y = cy + (rr * 0.94 * kotlin.math.sin(theta + twist)).toFloat()
                     if (step == 0) path.moveTo(x, y) else path.lineTo(x, y)
                 }
-                paint.style = Paint.Style.STROKE
-                paint.strokeWidth = (if (i == 1) 1.8f else 1.2f) * d
-                paint.color = intArrayOf(0xFF4C8BEB.toInt(), 0xFFC2D9FF.toInt(), 0xFF70D9FF.toInt(), 0xFF879DDA.toInt())[i]
-                paint.alpha = if (active) 245 else 170
-                canvas.drawPath(path, paint)
+                p.style = Paint.Style.STROKE
+                p.strokeWidth = (if (i == 2) 2.6f else 1.4f) * d
+                p.strokeCap = Paint.Cap.ROUND
+                p.color = intArrayOf(0xFF2461F7.toInt(), 0xFF4B9FFF.toInt(),
+                    0xFFB0E9FF.toInt(), 0xFF2C59C9.toInt(),
+                    0xFF69CFFF.toInt(), 0xFF3059B9.toInt(), 0xFF88CFFF.toInt())[i]
+                p.alpha = if (active) 255 else 185
+                p.setShadowLayer(7f * d, 0f, 0f, p.color)
+                canvas.drawPath(path, p)
+                p.clearShadowLayer()
             }
-            if (active) {
-                phase += 0.12f
-                postInvalidateDelayed(33)
-            }
+            phase += if (active) 0.055f + level * 0.055f else 0.018f
+            postInvalidateDelayed(33)
         }
     }
 }
