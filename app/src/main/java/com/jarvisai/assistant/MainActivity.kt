@@ -32,6 +32,11 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var art: AuraView
     private var listening = false
     private val permissionCode = 102
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var foreground = false
+    private var speaking = false
+    private var failures = 0
+    private val retry = Runnable { if (foreground && !speaking) startListen() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,51 +76,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         root.addView(greeting, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER).apply {
             topMargin = dp(210)
         })
-        val inputBar = FrameLayout(this).apply {
-            background = android.graphics.drawable.GradientDrawable(
-                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xFF234E84.toInt(), 0xFF4E9EE8.toInt())
-            ).apply {
-                cornerRadius = dp(28).toFloat()
-                setStroke(dp(1), 0xFF74B5FF.toInt())
-            }
-            elevation = dp(10).toFloat()
-        }
-        val field = android.widget.EditText(this).apply {
-            hint = "Ask anything..."
-            setHintTextColor(0xFFC2D4EC.toInt())
-            setTextColor(Color.WHITE)
-            textSize = 15f
-            background = null
-            isSingleLine = true
-            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND
-            setPadding(dp(20), 0, dp(8), 0)
-            setOnEditorActionListener { _, _, _ ->
-                val message = text.toString().trim()
-                if (message.isNotEmpty()) {
-                    respond(message)
-                    setText("")
-                }
-                true
-            }
-        }
-        inputBar.addView(field, FrameLayout.LayoutParams(-1, -1).apply {
-            rightMargin = dp(64)
-        })
-        val voice = TextView(this).apply {
-            text = "≋"
-            textSize = 33f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            contentDescription = "شروع فرمان صوتی"
-            setOnClickListener { requestListen() }
-        }
-        inputBar.addView(voice, FrameLayout.LayoutParams(dp(58), -1, Gravity.END))
-        root.addView(inputBar, FrameLayout.LayoutParams(-1, dp(62), Gravity.BOTTOM).apply {
-            leftMargin = dp(22)
-            rightMargin = dp(22)
-            bottomMargin = dp(28)
-        })
         status = TextView(this).apply {
             text = ""
             textSize = 13f
@@ -126,15 +86,45 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         root.addView(status, FrameLayout.LayoutParams(-1, dp(48), Gravity.BOTTOM).apply {
             leftMargin = dp(25)
             rightMargin = dp(25)
-            bottomMargin = dp(99)
+            bottomMargin = dp(45)
         })
         setContentView(root)
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), permissionCode)
+        }
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     override fun onInit(result: Int) {
-        if (result == TextToSpeech.SUCCESS) tts?.language = Locale.forLanguageTag("fa-IR")
+        if (result == TextToSpeech.SUCCESS) {
+            tts?.language = Locale.forLanguageTag("fa-IR")
+            tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) { speaking = true }
+                override fun onDone(utteranceId: String?) { runOnUiThread { speaking = false; scheduleListen(450) } }
+                override fun onError(utteranceId: String?) { runOnUiThread { speaking = false; scheduleListen(450) } }
+            })
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        foreground = true
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) scheduleListen(450)
+    }
+
+    override fun onPause() {
+        foreground = false
+        handler.removeCallbacks(retry)
+        recognizer?.cancel()
+        listening = false
+        art.active = false
+        super.onPause()
+    }
+
+    private fun scheduleListen(delay: Long) {
+        handler.removeCallbacks(retry)
+        if (foreground && !speaking) handler.postDelayed(retry, delay)
     }
 
     private fun requestListen() {
@@ -144,7 +134,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private fun startListen() {
-        if (listening) return
+        if (listening || !foreground || speaking) return
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             status.text = "سرویس تشخیص گفتار روی گوشی در دسترس نیست"
             return
@@ -154,6 +144,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {
                     listening = true
+                    failures = 0
                     art.active = true
                     status.text = "در حال گوش دادن..."
                 }
@@ -164,13 +155,15 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 override fun onError(error: Int) {
                     listening = false
                     art.active = false
-                    status.text = "تشخیص صدا ناموفق بود (کد $error). دوباره تلاش کن."
+                    status.text = "در انتظار فرمان صوتی..."
+                    failures = (failures + 1).coerceAtMost(6)
+                    scheduleListen(if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) 2500 else 650L * failures)
                 }
                 override fun onResults(results: Bundle?) {
                     listening = false
                     art.active = false
                     val spoken = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
-                    respond(spoken)
+                    if (spoken.isBlank()) scheduleListen(500) else respond(spoken)
                 }
                 override fun onPartialResults(partialResults: Bundle?) {
                     val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
@@ -189,6 +182,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             } catch (e: Exception) {
                 listening = false
                 status.text = "امکان شروع میکروفون وجود ندارد"
+                scheduleListen(3000)
             }
         }
     }
@@ -208,7 +202,11 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             else -> "شنیدم: $spoken. قابلیت هوش مصنوعی آنلاین هنوز فعال نشده است."
         }
         status.text = answer
-        tts?.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "jarvis-response")
+        if (foreground && tts != null) {
+            speaking = true
+            val result = tts?.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "jarvis-response")
+            if (result == TextToSpeech.ERROR) { speaking = false; scheduleListen(600) }
+        } else scheduleListen(600)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -220,6 +218,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     override fun onDestroy() {
+        handler.removeCallbacks(retry)
         recognizer?.destroy()
         tts?.shutdown()
         super.onDestroy()
