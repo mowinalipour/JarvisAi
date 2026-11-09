@@ -4,7 +4,7 @@ on:
     branches: [main]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -38,3 +38,14 @@ jobs:
           name: JarvisAI-debug-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+      - name: Publish directly downloadable APK to GitHub Releases
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk JarvisAI-v0.5.apk
+          if gh release view v0.5 >/dev/null 2>&1; then
+            gh release upload v0.5 JarvisAI-v0.5.apk --clobber
+          else
+            gh release create v0.5 JarvisAI-v0.5.apk --title "Jarvis AI v0.5" --notes "Foreground auto-listening prototype. Debug APK for testing." --prerelease
+          fi
