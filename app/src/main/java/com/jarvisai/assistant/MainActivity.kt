@@ -233,7 +233,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = resources.displayMetrics.density
             paint.color = Color.rgb(88, 137, 215)
-            canvas.drawRoundRect(panel, dp(40).toFloat(), dp(40).toFloat(), paint)
+            canvas.drawRoundRect(panel, 40f * resources.displayMetrics.density, 40f * resources.displayMetrics.density, paint)
             val centerY = h * 0.49f
             for (i in 0..3) {
                 val path = Path()
@@ -247,7 +247,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     if (step == 0) path.moveTo(x, y) else path.lineTo(x, y)
                 }
                 paint.color = intArrayOf(0xFF6EA7FF.toInt(), 0xFFB1C8FF.toInt(), 0xFF73C5E9.toInt(), 0xFF8E9FDF.toInt())[i]
-                paint.strokeWidth = dp(1).toFloat()
+                paint.strokeWidth = resources.displayMetrics.density
                 canvas.drawPath(path, paint)
             }
             paint.style = Paint.Style.FILL
