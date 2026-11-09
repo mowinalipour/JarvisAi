@@ -40,7 +40,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         tts = TextToSpeech(this, this)
 
         val root = FrameLayout(this).apply { setBackgroundColor(Color.rgb(3, 6, 18)) }
-        art = AuraView()
+        art = AuraView(this)
         root.addView(art, FrameLayout.LayoutParams(-1, -1))
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -209,7 +209,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         super.onDestroy()
     }
 
-    private inner class AuraView : View(this@MainActivity) {
+    private class AuraView(context: android.content.Context) : View(context) {
         var active = false
             set(value) { field = value; invalidate() }
         var level = 0f
@@ -228,10 +228,10 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 intArrayOf(Color.rgb(32, 68, 132), Color.rgb(8, 17, 42), Color.rgb(19, 47, 98)),
                 null, Shader.TileMode.CLAMP)
             paint.style = Paint.Style.FILL
-            canvas.drawRoundRect(panel, dp(40).toFloat(), dp(40).toFloat(), paint)
+            canvas.drawRoundRect(panel, 40f * resources.displayMetrics.density, 40f * resources.displayMetrics.density, paint)
             paint.shader = null
             paint.style = Paint.Style.STROKE
-            paint.strokeWidth = dp(1).toFloat()
+            paint.strokeWidth = resources.displayMetrics.density
             paint.color = Color.rgb(88, 137, 215)
             canvas.drawRoundRect(panel, dp(40).toFloat(), dp(40).toFloat(), paint)
             val centerY = h * 0.49f
@@ -239,7 +239,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 val path = Path()
                 for (step in 0..160) {
                     val t = step / 160f
-                    val x = left + dp(15) + (right - left - dp(30)) * t
+                    val x = left + 15f * resources.displayMetrics.density + (right - left - 30f * resources.displayMetrics.density) * t
                     val envelope = sin(Math.PI * t).toFloat()
                     val frequency = (3 + i) * Math.PI * 2
                     val amplitude = (24f + i * 9f + if (active) level * 40f else 0f) * resources.displayMetrics.density
