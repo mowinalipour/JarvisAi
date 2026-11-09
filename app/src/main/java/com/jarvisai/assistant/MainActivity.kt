@@ -246,7 +246,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     val y = centerY + sin(t * frequency + i * 0.7).toFloat() * envelope * amplitude
                     if (step == 0) path.moveTo(x, y) else path.lineTo(x, y)
                 }
-                paint.color = intArrayOf(0xFF6EA7FF, 0xFFB1C8FF, 0xFF73C5E9, 0xFF8E9FDF)[i].toInt()
+                paint.color = intArrayOf(0xFF6EA7FF.toInt(), 0xFFB1C8FF.toInt(), 0xFF73C5E9.toInt(), 0xFF8E9FDF.toInt())[i]
                 paint.strokeWidth = dp(1).toFloat()
                 canvas.drawPath(path, paint)
             }
