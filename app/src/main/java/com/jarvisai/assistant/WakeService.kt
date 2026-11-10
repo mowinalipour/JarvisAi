@@ -200,6 +200,7 @@ class WakeService : Service() {
         if (!sessionActive || !running || speaking) return
         recognizer?.destroy()
         recognizer = null
+        overlayOrb?.level = 0f
         val id = ++sessionId
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             subtitle?.text = "تشخیص گفتار در دسترس نیست"
@@ -219,6 +220,8 @@ class WakeService : Service() {
                 override fun onEndOfSpeech() { subtitle?.text = "در حال پردازش..." }
                 override fun onError(error: Int) {
                     if (id != sessionId) return
+                    recognizer?.destroy()
+                    recognizer = null
                     subtitle?.text = "صدایی دریافت نشد"
                     handler.postDelayed({ if (id == sessionId) finishSession() }, 1300)
                 }
