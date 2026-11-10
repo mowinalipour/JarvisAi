@@ -7,15 +7,12 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.*
 import android.provider.Settings
-import ai.picovoice.porcupine.Porcupine
-import ai.picovoice.porcupine.PorcupineManager
 import android.view.*
 import android.widget.*
-import java.util.Locale
 
 class WakeService : Service() {
     private val handler = Handler(Looper.getMainLooper())
-    private var engine: PorcupineManager? = null
+    private var engine: SherpaWakeEngine? = null
     private var running = false
     private var paused = false
     private var busy = false
@@ -64,42 +61,37 @@ class WakeService : Service() {
     }
 
     private fun stopEngine() {
-        try { engine?.stop() } catch (_: Exception) {}
-        try { engine?.delete() } catch (_: Exception) {}
+        engine?.stop()
         engine = null
         busy = false
     }
 
     private fun listen() {
         if (!running || paused || busy) return
-        val key = getSharedPreferences("jarvis", MODE_PRIVATE).getString("porcupine_key", "").orEmpty().trim()
-        if (key.isEmpty()) {
-            stopEngine()
-            return
-        }
-        try {
-            stopEngine()
-            val manager = PorcupineManager.Builder()
-                .setAccessKey(key)
-                .setKeyword(Porcupine.BuiltInKeyword.JARVIS)
-                .setSensitivity(0.65f)
-                .build(applicationContext) { _ ->
-                    handler.post {
-                        if (running && !paused) {
-                            stopEngine()
-                            showWake()
-                            // Resume after the pop-up; foreground Activity pauses this service.
-                            schedule(5500)
-                        }
+        busy = true
+        val detector = SherpaWakeEngine(
+            context = applicationContext,
+            onDetected = {
+                handler.post {
+                    if (running && !paused) {
+                        stopEngine() // release AudioRecord before launching command recognizer
+                        showWake()
+                        schedule(5500)
                     }
                 }
-            engine = manager
-            busy = true
-            manager.start()
-        } catch (_: Exception) {
-            stopEngine()
-            // Invalid AccessKey or engine failure: do not restart in a tight loop.
-        }
+            },
+            onFailure = { error ->
+                android.util.Log.e("JarvisWake", "Offline keyword engine failure", error)
+                handler.post {
+                    if (running && !paused) {
+                        stopEngine()
+                        schedule(10000)
+                    }
+                }
+            }
+        )
+        engine = detector
+        detector.start()
     }
 
     private fun schedule(delay: Long) {
@@ -109,7 +101,7 @@ class WakeService : Service() {
 
     private fun showWake() {
         if (!Settings.canDrawOverlays(this)) {
-            val launch = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            val launch = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra(MainActivity.EXTRA_WAKE_SESSION, true)
             try { startActivity(launch) } catch (_: Exception) {}
             return
         }
