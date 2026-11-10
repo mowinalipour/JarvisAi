@@ -7,18 +7,18 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.*
 import android.provider.Settings
-import android.speech.*
+import ai.picovoice.porcupine.Porcupine
+import ai.picovoice.porcupine.PorcupineManager
 import android.view.*
 import android.widget.*
 import java.util.Locale
 
 class WakeService : Service() {
     private val handler = Handler(Looper.getMainLooper())
-    private var recognizer: SpeechRecognizer? = null
+    private var engine: PorcupineManager? = null
     private var running = false
     private var paused = false
     private var busy = false
-    private var failures = 0
     private var overlay: View? = null
     private var windowManager: WindowManager? = null
     private val retry = Runnable { listen() }
@@ -51,9 +51,7 @@ class WakeService : Service() {
             "PAUSE" -> {
                 paused = true
                 handler.removeCallbacks(retry)
-                recognizer?.cancel()
-                recognizer?.destroy()
-                recognizer = null
+                stopEngine()
                 busy = false
             }
             "RESUME" -> {
@@ -65,43 +63,42 @@ class WakeService : Service() {
         return START_NOT_STICKY
     }
 
+    private fun stopEngine() {
+        try { engine?.stop() } catch (_: Exception) {}
+        try { engine?.delete() } catch (_: Exception) {}
+        engine = null
+        busy = false
+    }
+
     private fun listen() {
-        if (!running || paused || busy || !SpeechRecognizer.isRecognitionAvailable(this)) return
-        recognizer?.destroy()
-        recognizer = SpeechRecognizer.createSpeechRecognizer(this)
-        recognizer?.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) { failures = 0 }
-            override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {}
-            override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {}
-            override fun onError(error: Int) {
-                busy = false
-                failures = (failures + 1).coerceAtMost(8)
-                schedule(if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) 2500 else 700L * failures)
-            }
-            override fun onResults(results: Bundle?) {
-                busy = false
-                val words = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
-                if (words.any { it.contains("جارویس", ignoreCase = true) || it.contains("jarvis", ignoreCase = true) }) {
-                    showWake()
-                    schedule(4500)
-                } else schedule(550)
-            }
-            override fun onPartialResults(partialResults: Bundle?) {}
-            override fun onEvent(eventType: Int, params: Bundle?) {}
-        })
-        val request = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fa-IR")
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+        if (!running || paused || busy) return
+        val key = getSharedPreferences("jarvis", MODE_PRIVATE).getString("porcupine_key", "").orEmpty().trim()
+        if (key.isEmpty()) {
+            stopEngine()
+            return
         }
         try {
+            stopEngine()
+            val manager = PorcupineManager.Builder()
+                .setAccessKey(key)
+                .setKeyword(Porcupine.BuiltInKeyword.JARVIS)
+                .setSensitivity(0.65f)
+                .build(applicationContext) { _ ->
+                    handler.post {
+                        if (running && !paused) {
+                            stopEngine()
+                            showWake()
+                            // Resume after the pop-up; foreground Activity pauses this service.
+                            schedule(5500)
+                        }
+                    }
+                }
+            engine = manager
             busy = true
-            recognizer?.startListening(request)
-        } catch (e: Exception) {
-            busy = false
-            schedule(3000)
+            manager.start()
+        } catch (_: Exception) {
+            stopEngine()
+            // Invalid AccessKey or engine failure: do not restart in a tight loop.
         }
     }
 
@@ -215,8 +212,7 @@ class WakeService : Service() {
     override fun onDestroy() {
         running = false
         handler.removeCallbacksAndMessages(null)
-        recognizer?.cancel()
-        recognizer?.destroy()
+        stopEngine()
         dismiss()
         super.onDestroy()
     }
