@@ -9,6 +9,11 @@ import android.os.*
 import android.provider.Settings
 import android.view.*
 import android.widget.*
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import android.speech.tts.TextToSpeech
+import java.util.Locale
 
 class WakeService : Service() {
     private val handler = Handler(Looper.getMainLooper())
@@ -18,6 +23,13 @@ class WakeService : Service() {
     private var busy = false
     private var overlay: View? = null
     private var windowManager: WindowManager? = null
+    private var recognizer: SpeechRecognizer? = null
+    private var voice: TextToSpeech? = null
+    private var subtitle: TextView? = null
+    private var overlayOrb: WakeOrb? = null
+    private var sessionId = 0
+    private var sessionActive = false
+    private var speaking = false
     private val retry = Runnable { listen() }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -39,6 +51,9 @@ class WakeService : Service() {
             startForeground(77, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
         } else startForeground(77, notification)
         running = true
+        voice = TextToSpeech(this) { code ->
+            if (code == TextToSpeech.SUCCESS) voice?.language = Locale.forLanguageTag("fa-IR")
+        }
         handler.postDelayed(retry, 500)
     }
 
@@ -53,12 +68,13 @@ class WakeService : Service() {
                 paused = true
                 handler.removeCallbacks(retry)
                 stopEngine()
+                finishSession()
                 busy = false
             }
             "RESUME" -> {
                 paused = false
                 busy = false
-                schedule(800)
+                if (!sessionActive) schedule(800)
             }
         }
         return START_NOT_STICKY
@@ -79,8 +95,9 @@ class WakeService : Service() {
                 handler.post {
                     if (running && !paused) {
                         stopEngine() // release AudioRecord before launching command recognizer
+                        sessionActive = true
                         showWake()
-                        schedule(5500)
+                        beginConversation()
                     }
                 }
             },
@@ -100,102 +117,217 @@ class WakeService : Service() {
 
     private fun schedule(delay: Long) {
         handler.removeCallbacks(retry)
-        if (running && !paused) handler.postDelayed(retry, delay)
+        if (running && !paused && !sessionActive) handler.postDelayed(retry, delay)
     }
 
     private fun showWake() {
-        if (!Settings.canDrawOverlays(this)) {
-            val launch = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra(MainActivity.EXTRA_WAKE_SESSION, true)
-            try { startActivity(launch) } catch (_: Exception) {}
-            return
-        }
-        if (overlay != null) return
+        if (!Settings.canDrawOverlays(this) || overlay != null) return
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
         windowManager = wm
         val density = resources.displayMetrics.density
         fun dp(n: Int) = (n * density).toInt()
+        val size = dp(278)
         val panel = FrameLayout(this).apply {
             background = android.graphics.drawable.GradientDrawable(
                 android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
-                intArrayOf(0xF5091A3D.toInt(), 0xFA030918.toInt())
+                intArrayOf(0xF50B2449.toInt(), 0xFB020815.toInt())
             ).apply {
-                cornerRadius = dp(30).toFloat()
-                setStroke(dp(1), 0xFF468DEB.toInt())
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setStroke(dp(2), 0xFF5DAAFF.toInt())
             }
-            elevation = dp(20).toFloat()
+            elevation = dp(18).toFloat()
+            clipToOutline = true
+            contentDescription = "جارویس، در حال گوش دادن"
         }
         val orb = WakeOrb(this)
-        panel.addView(orb, FrameLayout.LayoutParams(dp(100), dp(100), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
-            topMargin = dp(12)
-        })
+        overlayOrb = orb
+        panel.addView(orb, FrameLayout.LayoutParams(dp(226), dp(226), Gravity.CENTER))
         val title = TextView(this).apply {
             text = "J A R V I S"
-            textSize = 20f
+            textSize = 19f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
+            letterSpacing = 0.11f
         }
-        panel.addView(title, FrameLayout.LayoutParams(-1, dp(38), Gravity.TOP).apply { topMargin = dp(110) })
-        val subtitle = TextView(this).apply {
-            text = "بیدارم، برای گفتگو لمس کن"
-            textSize = 14f
-            setTextColor(0xFFB8D7FF.toInt())
+        panel.addView(title, FrameLayout.LayoutParams(-1, dp(42), Gravity.CENTER).apply {
+            topMargin = dp(95)
+        })
+        val line = TextView(this).apply {
+            text = "در حال گوش دادن..."
+            textSize = 13f
+            setTextColor(0xFFB9DEFF.toInt())
             gravity = Gravity.CENTER
+            maxLines = 2
         }
-        panel.addView(subtitle, FrameLayout.LayoutParams(-1, dp(42), Gravity.BOTTOM).apply { bottomMargin = dp(10) })
+        subtitle = line
+        panel.addView(line, FrameLayout.LayoutParams(dp(230), dp(54), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
+            bottomMargin = dp(19)
+        })
         panel.setOnClickListener {
-            dismiss()
-            val launch = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            try { startActivity(launch) } catch (_: Exception) {}
+            if (sessionActive && !speaking) {
+                subtitle?.text = "در حال گوش دادن..."
+                startCommandRecognition()
+            }
         }
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT, dp(212),
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            size, size, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP
-            x = 0
-            y = dp(42)
-        }
+        ).apply { gravity = Gravity.CENTER; x = 0; y = 0 }
         try {
-            params.width = resources.displayMetrics.widthPixels - dp(44)
             wm.addView(panel, params)
             overlay = panel
-            handler.postDelayed({ dismiss() }, 6000)
-        } catch (_: Exception) {}
+        } catch (error: Exception) {
+            android.util.Log.e("JarvisWake", "Unable to show overlay", error)
+        }
+    }
+
+    private fun beginConversation() {
+        if (!running || !sessionActive) return
+        if (overlay == null) {
+            // Without overlay permission, use the existing full-screen voice UI.
+            val launch = Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(MainActivity.EXTRA_WAKE_SESSION, true)
+            try { startActivity(launch) } catch (_: Exception) {}
+            finishSession()
+            return
+        }
+        handler.postDelayed({ if (sessionActive) startCommandRecognition() }, 350)
+    }
+
+    private fun startCommandRecognition() {
+        if (!sessionActive || !running || speaking) return
+        recognizer?.destroy()
+        recognizer = null
+        val id = ++sessionId
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            subtitle?.text = "تشخیص گفتار در دسترس نیست"
+            handler.postDelayed({ if (id == sessionId) finishSession() }, 2000)
+            return
+        }
+        try {
+            val sr = SpeechRecognizer.createSpeechRecognizer(this)
+            recognizer = sr
+            sr.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) { subtitle?.text = "گوش می‌دم..." }
+                override fun onBeginningOfSpeech() { subtitle?.text = "دارم می‌شنوم..." }
+                override fun onRmsChanged(rmsdB: Float) {
+                    overlayOrb?.level = (rmsdB / 12f).coerceIn(0f, 1f)
+                }
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() { subtitle?.text = "در حال پردازش..." }
+                override fun onError(error: Int) {
+                    if (id != sessionId) return
+                    subtitle?.text = "صدایی دریافت نشد"
+                    handler.postDelayed({ if (id == sessionId) finishSession() }, 1300)
+                }
+                override fun onResults(results: Bundle?) {
+                    if (id != sessionId) return
+                    val heard = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull().orEmpty()
+                    if (heard.isBlank()) finishSession() else answer(heard)
+                }
+                override fun onPartialResults(partialResults: Bundle?) {
+                    if (id != sessionId) return
+                    val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull()
+                    if (!partial.isNullOrBlank()) subtitle?.text = partial
+                }
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+            sr.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fa-IR")
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            })
+            handler.postDelayed({ if (id == sessionId && sessionActive && !speaking) finishSession() }, 12000)
+        } catch (error: Exception) {
+            android.util.Log.e("JarvisWake", "Command recognition failed", error)
+            finishSession()
+        }
+    }
+
+    private fun answer(heard: String) {
+        recognizer?.destroy()
+        recognizer = null
+        subtitle?.text = heard
+        val response = when {
+            heard.contains("سلام") -> "سلام! من جارویس هستم."
+            heard.contains("ساعت") -> "ساعت الان " +
+                java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(java.util.Date()) + " است."
+            heard.contains("تنظیمات") -> "برای تنظیمات، برنامه جارویس را باز کن."
+            else -> "شنیدم: $heard"
+        }
+        subtitle?.text = response
+        val id = ++sessionId
+        val tts = voice
+        if (tts == null) {
+            handler.postDelayed({ if (id == sessionId) finishSession() }, 1800)
+            return
+        }
+        speaking = true
+        tts.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {}
+            override fun onDone(utteranceId: String?) {
+                handler.post { if (id == sessionId) finishSession() }
+            }
+            override fun onError(utteranceId: String?) {
+                handler.post { if (id == sessionId) finishSession() }
+            }
+        })
+        val result = tts.speak(response, TextToSpeech.QUEUE_FLUSH, null, "jarvis-overlay-$id")
+        if (result == TextToSpeech.ERROR) {
+            speaking = false
+            handler.postDelayed({ if (id == sessionId) finishSession() }, 1800)
+        } else handler.postDelayed({ if (id == sessionId) finishSession() }, 11000)
+    }
+
+    private fun finishSession() {
+        if (!sessionActive && overlay == null) return
+        sessionActive = false
+        speaking = false
+        ++sessionId
+        recognizer?.cancel()
+        recognizer?.destroy()
+        recognizer = null
+        voice?.stop()
+        dismiss()
+        if (running && !paused) schedule(1100)
     }
 
     private class WakeOrb(context: Context) : View(context) {
         private val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
         private var phase = 0.0
+        var level = 0f
         override fun onDraw(canvas: android.graphics.Canvas) {
             super.onDraw(canvas)
             val cx = width / 2f
             val cy = height / 2f
-            val r = minOf(width, height) * 0.31f
+            val r = minOf(width, height) * (0.29f + level * 0.08f)
             p.style = android.graphics.Paint.Style.FILL
             p.shader = android.graphics.RadialGradient(cx, cy, r * 1.65f,
                 intArrayOf(0xAA246EEB.toInt(), 0x553678D9, Color.TRANSPARENT),
                 null, android.graphics.Shader.TileMode.CLAMP)
             canvas.drawCircle(cx, cy, r * 1.65f, p)
             p.shader = null
-            for (i in 0..5) {
+            for (i in 0..8) {
                 val path = android.graphics.Path()
                 for (step in 0..140) {
                     val t = step * Math.PI * 2.0 / 140.0
-                    val rr = r * (0.87 + 0.14 * kotlin.math.sin(t * 3 + phase + i * 0.8))
+                    val rr = r * (0.82 + 0.20 * kotlin.math.sin(t * 3 + phase * 1.4 + i * 0.8) + 0.055 * kotlin.math.sin(t * 7 - phase * 1.9))
                     val x = cx + (rr * kotlin.math.cos(t + phase * 0.15 + i * 0.25)).toFloat()
                     val y = cy + (rr * kotlin.math.sin(t + phase * 0.15 + i * 0.25)).toFloat()
                     if (step == 0) path.moveTo(x, y) else path.lineTo(x, y)
                 }
                 p.style = android.graphics.Paint.Style.STROKE
                 p.strokeWidth = resources.displayMetrics.density * (if (i == 2) 2.3f else 1.2f)
-                p.color = intArrayOf(0xFF5EA9FF.toInt(), 0xFF2C72F4.toInt(), 0xFFA4E9FF.toInt(), 0xFF467EEA.toInt(), 0xFF7ECFFF.toInt(), 0xFF4B99F2.toInt())[i]
+                p.color = intArrayOf(0xFF5EA9FF.toInt(), 0xFF2C72F4.toInt(), 0xFFA4E9FF.toInt(), 0xFF467EEA.toInt(), 0xFF7ECFFF.toInt(), 0xFF4B99F2.toInt(), 0xFFB5EFFF.toInt(), 0xFF396DDC.toInt(), 0xFF80B9FF.toInt())[i]
                 p.setShadowLayer(7f, 0f, 0f, p.color)
                 canvas.drawPath(path, p)
                 p.clearShadowLayer()
             }
-            phase += 0.045
+            phase += 0.095 + level * 0.11
             postInvalidateDelayed(33)
         }
     }
@@ -203,12 +335,17 @@ class WakeService : Service() {
     private fun dismiss() {
         overlay?.let { try { windowManager?.removeView(it) } catch (_: Exception) {} }
         overlay = null
+        subtitle = null
+        overlayOrb = null
     }
 
     override fun onDestroy() {
         running = false
         handler.removeCallbacksAndMessages(null)
         stopEngine()
+        finishSession()
+        voice?.shutdown()
+        voice = null
         dismiss()
         super.onDestroy()
     }
