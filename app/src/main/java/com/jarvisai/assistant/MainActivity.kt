@@ -45,7 +45,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             listening = false
             handler.removeCallbacks(retry)
             val intent = Intent(this, WakeService::class.java)
-            try { startForegroundService(intent) } catch (e: Exception) {
+            try { startForegroundService(intent)
+                if (foreground) startService(Intent(this, WakeService::class.java).setAction("PAUSE"))
+            } catch (e: Exception) {
                 getSharedPreferences("jarvis", MODE_PRIVATE).edit().putBoolean("wake", false).apply()
                 status.text = "فعال‌سازی سرویس ممکن نشد"
             }
@@ -64,6 +66,10 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         if (!Settings.canDrawOverlays(this)) {
             startActivityForResult(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                 android.net.Uri.parse("package:$packageName")), 103)
+            return
+        }
+        if (getSharedPreferences("jarvis", MODE_PRIVATE).getString("porcupine_key", "").isNullOrBlank()) {
+            showSettings()
             return
         }
         setWake(true)
@@ -95,7 +101,19 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             textSize = 16f
             isChecked = wakeEnabled()
         }
-        wakeToggle = TextView(this)
+        val keyField = android.widget.EditText(this).apply {
+            hint = "Picovoice AccessKey"
+            setSingleLine(true)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setText(getSharedPreferences("jarvis", MODE_PRIVATE).getString("porcupine_key", ""))
+        }
+        panel.addView(keyField)
+        val help = TextView(this).apply {
+            text = "کلید Picovoice فقط روی گوشی ذخیره می‌شود. کلمه پیش‌فرض Jarvis انگلیسی است و ممکن است با تلفظ فارسی متفاوت عمل کند."
+            textSize = 12f
+            setPadding(0, dp(8), 0, dp(12))
+        }
+        panel.addView(help)
         panel.addView(toggle)
         val dialog = android.app.AlertDialog.Builder(this)
             .setTitle("تنظیمات جارویس")
@@ -103,9 +121,24 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             .setPositiveButton("بستن", null)
             .create()
         toggle.setOnCheckedChangeListener { _, enabled ->
+            val key = keyField.text.toString().trim()
+            getSharedPreferences("jarvis", MODE_PRIVATE).edit().putString("porcupine_key", key).apply()
+            if (enabled && key.isBlank()) {
+                toggle.isChecked = false
+                keyField.error = "ابتدا AccessKey را وارد کن"
+                return@setOnCheckedChangeListener
+            }
             if (enabled != wakeEnabled()) requestWake()
             toggle.isChecked = wakeEnabled()
-            dialog.dismiss()
+        }
+        dialog.setOnDismissListener {
+            val key = keyField.text.toString().trim()
+            getSharedPreferences("jarvis", MODE_PRIVATE).edit().putString("porcupine_key", key).apply()
+            if (wakeEnabled()) {
+                stopService(Intent(this, WakeService::class.java))
+                setWake(true)
+                startService(Intent(this, WakeService::class.java).setAction("PAUSE"))
+            }
         }
         dialog.show()
     }
