@@ -1,30 +1,36 @@
-# Jarvis v1.0: sherpa-onnx wake word migration
+# Jarvis v1.0 — sherpa-onnx integration status
 
-## Decision
-Replace Porcupine with sherpa-onnx keyword spotting (KWS). No Picovoice AccessKey.
+## Source changes completed
+- Offline keyword detection implementation: `SherpaWakeEngine.kt` (sherpa-onnx Kotlin API).
+- 16-kHz continuous PCM microphone capture: `WakeAudioCapture.kt`.
+- Background microphone foreground service: `WakeService.kt`; continuous KWS replaces cycling `SpeechRecognizer`.
+- New settings require no Picovoice AccessKey; enable wake word and grant Android microphone + overlay permissions.
+- Animated wake overlay retained. **Tap the overlay** to activate Android Persian command recognition.
+- When a voice session ends, microphone ownership returns to the offline wake detector.
+- Stop notification action disables wake mode in preferences.
 
-## Important: not yet integrated
-Current v0.9 still uses Porcupine. Do not label an APK as v1.0 or remove its working dependency until the Android native libraries, model files, and Kotlin bindings are verified and CI builds successfully.
+## Build pipeline
+`scripts/prepare-sherpa.sh` downloads the official `sherpa-onnx-2.0.1.aar`
+(sha256: `a8d09d1d32f3eb8520482c6d3d43fae674681c5b050385967c70a3c2c9bf0ee7`)
+and English GigaSpeech KWS model `sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01`.
+The script generates a tokenized `JARVIS` keyword using the model's SentencePiece vocabulary
+and bundles the ONNX files as Android assets. GitHub Actions builds an arm64 debug APK,
+and publishes `JarvisAI-v1.0.apk` to Releases **only if the build passes**.
 
-## Upstream references
+## Testing not yet verified
+- GitHub Actions build success and Release APK availability must be confirmed.
+- A physical Android device must validate wake detection with the user's accent
+  (English-trained model may miss Persian pronunciation), false positives and
+  CPU/battery performance.
+- Android's microphone privacy indicator remains visible while listening;
+  the goal is to eliminate periodic SpeechRecognizer session restarts, not
+  conceal microphone use.
+- This is an experimental one-shot interaction: tap the overlay, speak a Persian
+  command, hear the response, return to offline wake monitoring.
+- The command recognition stage may use the device's Google speech service;
+  **only wake-word detection is guaranteed to be local**.
+
+## References
 - https://github.com/k2-fsa/sherpa-onnx/tree/master/android/SherpaOnnxKws
 - https://k2-fsa.github.io/sherpa/onnx/kws/index.html
 - https://github.com/k2-fsa/sherpa-onnx/releases/tag/kws-models
-- https://k2-fsa.github.io/sherpa/onnx/kws/apk.html
-
-## Implementation checklist
-1. Pin a tested sherpa-onnx release, ABI(s), and compatible model license; record checksums.
-2. Port the upstream Android KWS sample and bundle model, tokens, and keyword configuration as assets. Check the actual supported pronunciation for 'Jarvis' versus Persian 'جارویس'.
-3. Implement a single AudioRecord owner in a microphone foreground service; feed PCM chunks continuously to the KWS engine.
-4. On detection, pause and release AudioRecord before starting Android SpeechRecognizer for the user command; resume KWS only after speech recognition/TTS completes and the foreground activity yields microphone ownership.
-5. Keep the existing animated overlay; expose an opt-in wake toggle in hamburger > Settings. Remove the Picovoice key field only when KWS is functional.
-6. Handle notification, microphone, overlay permissions and Android background restrictions. Do not bypass Android privacy indicators.
-7. Validate detection, false positives, battery consumption, lock screen behavior, permission denial and service restart on a physical Android 16 device.
-8. Build APK in GitHub Actions; verify success and a downloadable APK before publishing a v1.0 release.
-
-## Acceptance criteria
-- No Picovoice dependency, key or network requirement for wake detection.
-- No repeated SpeechRecognizer listening loop while idle in background.
-- Local wake word detection triggers overlay, then transfers mic ownership to the command recognizer.
-- Graceful disable, pause, and notification stop action.
-- APK build and release confirmed by GitHub Actions.
