@@ -44,7 +44,11 @@ class WakeService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            "STOP" -> { stopSelf(); return START_NOT_STICKY }
+            "STOP" -> {
+                getSharedPreferences("jarvis", MODE_PRIVATE).edit().putBoolean("wake", false).apply()
+                stopSelf()
+                return START_NOT_STICKY
+            }
             "PAUSE" -> {
                 paused = true
                 handler.removeCallbacks(retry)
