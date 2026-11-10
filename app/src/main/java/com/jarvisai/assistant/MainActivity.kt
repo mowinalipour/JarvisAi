@@ -38,7 +38,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var foreground = false
     private var speaking = false
     private var failures = 0
-    private var wakeToggle: TextView? = null
     private fun wakeEnabled(): Boolean = getSharedPreferences("jarvis", MODE_PRIVATE).getBoolean("wake", false)
     private fun setWake(enabled: Boolean) {
         getSharedPreferences("jarvis", MODE_PRIVATE).edit().putBoolean("wake", enabled).apply()
@@ -59,7 +58,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             stopService(Intent(this, WakeService::class.java))
             scheduleListen(400)
         }
-        wakeToggle?.text = if (wakeEnabled()) "● بیدارباش فعال — لمس برای توقف" else "○ فعال‌کردن بیدارباش جارویس"
     }
     private fun requestWake() {
         if (wakeEnabled()) { setWake(false); return }
@@ -90,7 +88,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             setPadding(dp(22), dp(16), dp(22), dp(12))
         }
         val description = TextView(this).apply {
-            text = "بیدارباش آفلاین sherpa-onnx\\nبا گفتن «جارویس» پنجره شناور باز می‌شود. بدون کلید API و اینترنت. میکروفون در حالت آماده‌باش فعال می‌ماند و نشانگر حریم خصوصی اندروید طبیعی است. مدل فعلی انگلیسی و آزمایشی است."
+            text = "بیدارباش آفلاین sherpa-onnx\nبا گفتن «جارویس» پنجره شناور باز می‌شود. بدون کلید API و اینترنت. میکروفون در حالت آماده‌باش فعال می‌ماند و نشانگر حریم خصوصی اندروید طبیعی است. مدل فعلی انگلیسی و آزمایشی است."
             textSize = 15f
             setTextColor(0xFF243650.toInt())
             setPadding(0, 0, 0, dp(18))
