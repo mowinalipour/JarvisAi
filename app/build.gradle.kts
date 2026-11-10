@@ -9,8 +9,9 @@ android {
         applicationId = "com.jarvisai.assistant"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.9"
+        ndk { abiFilters += listOf("arm64-v8a") }
+        versionCode = 10
+        versionName = "1.0"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -19,7 +20,7 @@ android {
     kotlinOptions { jvmTarget = "17" }
 }
 dependencies {
-    implementation("ai.picovoice:porcupine-android:4.0.2")
+    implementation(files("libs/sherpa-onnx.aar"))
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-ktx:1.9.3")
 }
