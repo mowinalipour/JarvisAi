@@ -127,15 +127,35 @@ class WakeService : Service() {
         val density = resources.displayMetrics.density
         fun dp(n: Int) = (n * density).toInt()
         val size = dp(278)
+        // Draw a soft radial alpha fade instead of a hard circular boundary.
+        // Transparent outer pixels let the user's home screen blend through.
         val panel = FrameLayout(this).apply {
-            background = android.graphics.drawable.GradientDrawable(
-                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
-                intArrayOf(0xF50B2449.toInt(), 0xFB020815.toInt())
-            ).apply {
-                shape = android.graphics.drawable.GradientDrawable.OVAL
+            background = object : android.graphics.drawable.Drawable() {
+                private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+                override fun draw(canvas: android.graphics.Canvas) {
+                    val cx = bounds.exactCenterX()
+                    val cy = bounds.exactCenterY()
+                    val radius = minOf(bounds.width(), bounds.height()) * 0.5f
+                    paint.shader = android.graphics.RadialGradient(
+                        cx, cy, radius,
+                        intArrayOf(
+                            0xF5092045.toInt(),
+                            0xF2071937.toInt(),
+                            0xE604142C.toInt(),
+                            0xA5031026.toInt(),
+                            0x00031026
+                        ),
+                        floatArrayOf(0f, 0.40f, 0.66f, 0.82f, 1f),
+                        android.graphics.Shader.TileMode.CLAMP
+                    )
+                    canvas.drawCircle(cx, cy, radius, paint)
+                    paint.shader = null
+                }
+                override fun setAlpha(alpha: Int) { invalidateSelf() }
+                override fun setColorFilter(filter: android.graphics.ColorFilter?) {}
+                @Deprecated("Deprecated in Android API")
+                override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
             }
-            elevation = dp(18).toFloat()
-            clipToOutline = true
             contentDescription = "جارویس، در حال گوش دادن"
         }
         val orb = WakeOrb(this)
