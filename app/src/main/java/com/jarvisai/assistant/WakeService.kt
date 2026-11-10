@@ -133,7 +133,6 @@ class WakeService : Service() {
                 intArrayOf(0xF50B2449.toInt(), 0xFB020815.toInt())
             ).apply {
                 shape = android.graphics.drawable.GradientDrawable.OVAL
-                setStroke(dp(2), 0xFF5DAAFF.toInt())
             }
             elevation = dp(18).toFloat()
             clipToOutline = true
@@ -141,27 +140,29 @@ class WakeService : Service() {
         }
         val orb = WakeOrb(this)
         overlayOrb = orb
-        panel.addView(orb, FrameLayout.LayoutParams(dp(226), dp(226), Gravity.CENTER))
+        panel.addView(orb, FrameLayout.LayoutParams(dp(176), dp(176), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
+            topMargin = dp(12)
+        })
         val title = TextView(this).apply {
-            text = "J A R V I S"
-            textSize = 19f
+            text = "JARVIS"
+            textSize = 18f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-            letterSpacing = 0.11f
+            letterSpacing = 0.20f
         }
-        panel.addView(title, FrameLayout.LayoutParams(-1, dp(42), Gravity.CENTER).apply {
-            topMargin = dp(95)
+        panel.addView(title, FrameLayout.LayoutParams(dp(230), dp(36), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
+            topMargin = dp(179)
         })
         val line = TextView(this).apply {
             text = "در حال گوش دادن..."
-            textSize = 13f
+            textSize = 12f
             setTextColor(0xFFB9DEFF.toInt())
             gravity = Gravity.CENTER
             maxLines = 2
         }
         subtitle = line
-        panel.addView(line, FrameLayout.LayoutParams(dp(230), dp(54), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
-            bottomMargin = dp(19)
+        panel.addView(line, FrameLayout.LayoutParams(dp(216), dp(45), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
+            topMargin = dp(215)
         })
         panel.setOnClickListener {
             if (sessionActive && !speaking) {
@@ -307,7 +308,7 @@ class WakeService : Service() {
             super.onDraw(canvas)
             val cx = width / 2f
             val cy = height / 2f
-            val r = minOf(width, height) * (0.29f + level * 0.08f)
+            val r = minOf(width, height) * (0.26f + level * 0.055f)
             p.style = android.graphics.Paint.Style.FILL
             p.shader = android.graphics.RadialGradient(cx, cy, r * 1.65f,
                 intArrayOf(0xAA246EEB.toInt(), 0x553678D9, Color.TRANSPARENT),
