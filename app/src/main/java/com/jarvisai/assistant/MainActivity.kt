@@ -196,7 +196,10 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     override fun onResume() {
         super.onResume()
         foreground = true
-        if (!wakeEnabled() && checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) scheduleListen(450)
+        if (wakeEnabled()) {
+            startService(Intent(this, WakeService::class.java).setAction("PAUSE"))
+        }
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) scheduleListen(1000)
     }
 
     override fun onPause() {
@@ -205,12 +208,15 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         recognizer?.cancel()
         listening = false
         art.active = false
+        if (wakeEnabled()) {
+            startService(Intent(this, WakeService::class.java).setAction("RESUME"))
+        }
         super.onPause()
     }
 
     private fun scheduleListen(delay: Long) {
         handler.removeCallbacks(retry)
-        if (foreground && !speaking && !wakeEnabled()) handler.postDelayed(retry, delay)
+        if (foreground && !speaking) handler.postDelayed(retry, delay)
     }
 
     private fun requestListen() {
@@ -298,7 +304,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == permissionCode) {
-            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) { if (!wakeEnabled()) startListen() }
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) scheduleListen(500)
             else status.text = "برای صحبت، مجوز میکروفون لازم است."
         }
     }
