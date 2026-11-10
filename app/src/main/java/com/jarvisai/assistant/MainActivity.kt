@@ -211,6 +211,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val woken = intent?.getBooleanExtra(EXTRA_WAKE_SESSION, false) == true
         intent?.removeExtra(EXTRA_WAKE_SESSION)
         if (wakeEnabled()) {
+            try { startForegroundService(Intent(this, WakeService::class.java)) } catch (_: Exception) {}
             if (woken) {
                 conversationActive = true
                 startService(Intent(this, WakeService::class.java).setAction("PAUSE"))
@@ -345,7 +346,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         if (foreground && tts != null) {
             speaking = true
             val result = tts?.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "jarvis-response")
-            if (result == TextToSpeech.ERROR) { speaking = false; scheduleListen(600) }
+            if (result == TextToSpeech.ERROR) { speaking = false; if (wakeEnabled()) endSession() else scheduleListen(600) }
         } else if (wakeEnabled()) endSession() else scheduleListen(600)
     }
 
