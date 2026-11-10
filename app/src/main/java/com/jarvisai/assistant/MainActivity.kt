@@ -26,6 +26,8 @@ import java.util.Locale
 import kotlin.math.sin
 
 class MainActivity : Activity(), TextToSpeech.OnInitListener {
+    companion object { const val EXTRA_WAKE_SESSION = "jarvis_wake_session" }
+    private var conversationActive = false
     private var recognizer: SpeechRecognizer? = null
     private var tts: TextToSpeech? = null
     private lateinit var status: TextView
@@ -41,12 +43,14 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private fun setWake(enabled: Boolean) {
         getSharedPreferences("jarvis", MODE_PRIVATE).edit().putBoolean("wake", enabled).apply()
         if (enabled) {
+            conversationActive = false
             recognizer?.cancel()
             listening = false
             handler.removeCallbacks(retry)
             val intent = Intent(this, WakeService::class.java)
-            try { startForegroundService(intent)
-                if (foreground) startService(Intent(this, WakeService::class.java).setAction("PAUSE"))
+            try {
+                startForegroundService(intent)
+                status.text = "در انتظار «جارویس»... برای صحبت می‌توانی روی صفحه لمس کنی"
             } catch (e: Exception) {
                 getSharedPreferences("jarvis", MODE_PRIVATE).edit().putBoolean("wake", false).apply()
                 status.text = "فعال‌سازی سرویس ممکن نشد"
@@ -68,10 +72,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 android.net.Uri.parse("package:$packageName")), 103)
             return
         }
-        if (getSharedPreferences("jarvis", MODE_PRIVATE).getString("porcupine_key", "").isNullOrBlank()) {
-            showSettings()
-            return
-        }
         setWake(true)
     }
     private fun showMenu() {
@@ -90,30 +90,17 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             setPadding(dp(22), dp(16), dp(22), dp(12))
         }
         val description = TextView(this).apply {
-            text = "بیدارباش صوتی\nبا گفتن «جارویس» در سایر برنامه‌ها پنجره شناور باز می‌شود. این قابلیت آزمایشی است و میکروفون با اعلان دائمی فعال می‌ماند."
+            text = "بیدارباش آفلاین sherpa-onnx\\nبا گفتن «جارویس» پنجره شناور باز می‌شود. بدون کلید API و اینترنت. میکروفون در حالت آماده‌باش فعال می‌ماند و نشانگر حریم خصوصی اندروید طبیعی است. مدل فعلی انگلیسی و آزمایشی است."
             textSize = 15f
             setTextColor(0xFF243650.toInt())
             setPadding(0, 0, 0, dp(18))
         }
         panel.addView(description)
         val toggle = android.widget.Switch(this).apply {
-            text = "فعال‌سازی بیدارباش"
+            text = "فعال‌سازی بیدارباش آفلاین"
             textSize = 16f
             isChecked = wakeEnabled()
         }
-        val keyField = android.widget.EditText(this).apply {
-            hint = "Picovoice AccessKey"
-            setSingleLine(true)
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-            setText(getSharedPreferences("jarvis", MODE_PRIVATE).getString("porcupine_key", ""))
-        }
-        panel.addView(keyField)
-        val help = TextView(this).apply {
-            text = "کلید Picovoice فقط روی گوشی ذخیره می‌شود. کلمه پیش‌فرض Jarvis انگلیسی است و ممکن است با تلفظ فارسی متفاوت عمل کند."
-            textSize = 12f
-            setPadding(0, dp(8), 0, dp(12))
-        }
-        panel.addView(help)
         panel.addView(toggle)
         val dialog = android.app.AlertDialog.Builder(this)
             .setTitle("تنظیمات جارویس")
@@ -121,24 +108,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             .setPositiveButton("بستن", null)
             .create()
         toggle.setOnCheckedChangeListener { _, enabled ->
-            val key = keyField.text.toString().trim()
-            getSharedPreferences("jarvis", MODE_PRIVATE).edit().putString("porcupine_key", key).apply()
-            if (enabled && key.isBlank()) {
-                toggle.isChecked = false
-                keyField.error = "ابتدا AccessKey را وارد کن"
-                return@setOnCheckedChangeListener
-            }
             if (enabled != wakeEnabled()) requestWake()
             toggle.isChecked = wakeEnabled()
-        }
-        dialog.setOnDismissListener {
-            val key = keyField.text.toString().trim()
-            getSharedPreferences("jarvis", MODE_PRIVATE).edit().putString("porcupine_key", key).apply()
-            if (wakeEnabled()) {
-                stopService(Intent(this, WakeService::class.java))
-                setWake(true)
-                startService(Intent(this, WakeService::class.java).setAction("PAUSE"))
-            }
         }
         dialog.show()
     }
@@ -159,6 +130,14 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
         root.addView(ambient, FrameLayout.LayoutParams(-1, -1))
         art = AuraView(this)
+        art.contentDescription = "برای صحبت با جارویس لمس کن"
+        art.setOnClickListener {
+            if (wakeEnabled()) {
+                conversationActive = true
+                startService(Intent(this, WakeService::class.java).setAction("PAUSE"))
+                scheduleListen(450)
+            } else requestListen()
+        }
         root.addView(art, FrameLayout.LayoutParams(-1, -1))
         val greeting = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -220,8 +199,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             tts?.language = Locale.forLanguageTag("fa-IR")
             tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) { speaking = true }
-                override fun onDone(utteranceId: String?) { runOnUiThread { speaking = false; scheduleListen(450) } }
-                override fun onError(utteranceId: String?) { runOnUiThread { speaking = false; scheduleListen(450) } }
+                override fun onDone(utteranceId: String?) { runOnUiThread { speaking = false; if (wakeEnabled()) endSession() else scheduleListen(450) } }
+                override fun onError(utteranceId: String?) { runOnUiThread { speaking = false; if (wakeEnabled()) endSession() else scheduleListen(450) } }
             })
         }
     }
@@ -229,27 +208,60 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     override fun onResume() {
         super.onResume()
         foreground = true
+        val woken = intent?.getBooleanExtra(EXTRA_WAKE_SESSION, false) == true
+        intent?.removeExtra(EXTRA_WAKE_SESSION)
         if (wakeEnabled()) {
-            startService(Intent(this, WakeService::class.java).setAction("PAUSE"))
+            if (woken) {
+                conversationActive = true
+                startService(Intent(this, WakeService::class.java).setAction("PAUSE"))
+                scheduleListen(700)
+            } else {
+                status.text = "در انتظار «جارویس»... برای صحبت صفحه را لمس کن"
+            }
+        } else if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            scheduleListen(1000)
         }
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) scheduleListen(1000)
+    }
+
+    override fun onNewIntent(newIntent: Intent) {
+        super.onNewIntent(newIntent)
+        setIntent(newIntent)
+        if (newIntent.getBooleanExtra(EXTRA_WAKE_SESSION, false) && wakeEnabled()) {
+            newIntent.removeExtra(EXTRA_WAKE_SESSION)
+            conversationActive = true
+            startService(Intent(this, WakeService::class.java).setAction("PAUSE"))
+            scheduleListen(600)
+        }
     }
 
     override fun onPause() {
         foreground = false
+        conversationActive = false
         handler.removeCallbacks(retry)
         recognizer?.cancel()
         listening = false
         art.active = false
         if (wakeEnabled()) {
-            startService(Intent(this, WakeService::class.java).setAction("RESUME"))
+            try { startService(Intent(this, WakeService::class.java).setAction("RESUME")) } catch (_: Exception) {}
         }
         super.onPause()
     }
 
+    private fun endSession() {
+        conversationActive = false
+        handler.removeCallbacks(retry)
+        recognizer?.cancel()
+        listening = false
+        art.active = false
+        status.text = "در انتظار «جارویس»..."
+        if (wakeEnabled() && foreground) {
+            try { startService(Intent(this, WakeService::class.java).setAction("RESUME")) } catch (_: Exception) {}
+        }
+    }
+
     private fun scheduleListen(delay: Long) {
         handler.removeCallbacks(retry)
-        if (foreground && !speaking) handler.postDelayed(retry, delay)
+        if (foreground && !speaking && (!wakeEnabled() || conversationActive)) handler.postDelayed(retry, delay)
     }
 
     private fun requestListen() {
@@ -259,7 +271,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private fun startListen() {
-        if (listening || !foreground || speaking) return
+        if (listening || !foreground || speaking || (wakeEnabled() && !conversationActive)) return
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             status.text = "سرویس تشخیص گفتار روی گوشی در دسترس نیست"
             return
@@ -282,13 +294,16 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     art.active = false
                     status.text = "در انتظار فرمان صوتی..."
                     failures = (failures + 1).coerceAtMost(6)
-                    scheduleListen(if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) 2500 else 650L * failures)
+                    if (wakeEnabled() && failures >= 2) endSession()
+                    else scheduleListen(if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) 2500 else 650L * failures)
                 }
                 override fun onResults(results: Bundle?) {
                     listening = false
                     art.active = false
                     val spoken = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
-                    if (spoken.isBlank()) scheduleListen(500) else respond(spoken)
+                    if (spoken.isBlank()) {
+                        if (wakeEnabled()) endSession() else scheduleListen(500)
+                    } else respond(spoken)
                 }
                 override fun onPartialResults(partialResults: Bundle?) {
                     val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
@@ -331,7 +346,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             speaking = true
             val result = tts?.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "jarvis-response")
             if (result == TextToSpeech.ERROR) { speaking = false; scheduleListen(600) }
-        } else scheduleListen(600)
+        } else if (wakeEnabled()) endSession() else scheduleListen(600)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
