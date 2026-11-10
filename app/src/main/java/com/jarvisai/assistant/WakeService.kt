@@ -16,6 +16,7 @@ class WakeService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var recognizer: SpeechRecognizer? = null
     private var running = false
+    private var paused = false
     private var busy = false
     private var failures = 0
     private var overlay: View? = null
@@ -45,12 +46,27 @@ class WakeService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == "STOP") { stopSelf(); return START_NOT_STICKY }
+        when (intent?.action) {
+            "STOP" -> { stopSelf(); return START_NOT_STICKY }
+            "PAUSE" -> {
+                paused = true
+                handler.removeCallbacks(retry)
+                recognizer?.cancel()
+                recognizer?.destroy()
+                recognizer = null
+                busy = false
+            }
+            "RESUME" -> {
+                paused = false
+                busy = false
+                schedule(800)
+            }
+        }
         return START_NOT_STICKY
     }
 
     private fun listen() {
-        if (!running || busy || !SpeechRecognizer.isRecognitionAvailable(this)) return
+        if (!running || paused || busy || !SpeechRecognizer.isRecognitionAvailable(this)) return
         recognizer?.destroy()
         recognizer = SpeechRecognizer.createSpeechRecognizer(this)
         recognizer?.setRecognitionListener(object : RecognitionListener {
@@ -91,7 +107,7 @@ class WakeService : Service() {
 
     private fun schedule(delay: Long) {
         handler.removeCallbacks(retry)
-        if (running) handler.postDelayed(retry, delay)
+        if (running && !paused) handler.postDelayed(retry, delay)
     }
 
     private fun showWake() {
