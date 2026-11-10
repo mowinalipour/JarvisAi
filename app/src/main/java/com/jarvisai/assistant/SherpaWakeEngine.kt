@@ -53,14 +53,16 @@ class SherpaWakeEngine(
                     keywordsScore = 1.5f,
                     keywordsThreshold = 0.35f
                 )
-                kws = KeywordSpotter(assetManager = context.assets, config = config)
-                onlineStream = kws.createStream()
-                require(onlineStream.ptr != 0L) { "Keyword stream creation failed" }
+                val loadedSpotter = KeywordSpotter(assetManager = context.assets, config = config)
+                kws = loadedSpotter
+                val loadedStream = loadedSpotter.createStream()
+                onlineStream = loadedStream
+                require(loadedStream.ptr != 0L) { "Keyword stream creation failed" }
                 synchronized(gate) {
                     if (!enabled.get()) return@synchronized
                     val source = WakeAudioCapture(context)
-                    val detector = kws!!
-                    val sourceStream = onlineStream!!
+                    val detector = loadedSpotter
+                    val sourceStream = loadedStream
                     val started = source.start(
                         onSamples = { samples ->
                             if (enabled.get() && !signalled.get()) {
