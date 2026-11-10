@@ -249,7 +249,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private fun endSession() {
         conversationActive = false
         handler.removeCallbacks(retry)
-        recognizer?.cancel()
+        recognizer?.destroy()
+        recognizer = null
         listening = false
         art.active = false
         status.text = "در انتظار «جارویس»..."
